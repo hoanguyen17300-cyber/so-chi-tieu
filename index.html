@@ -180,6 +180,10 @@ function parseReceipt(text){
   else if(/bidv/.test(all))bank='BIDV';
   else if(/ten nguoi nhan/.test(all)&&/ma tham chieu/.test(all))bank='VCB';
   else if(/^den\s*:/m.test(all)&&/so tham chieu/.test(all))bank='BIDV';
+  if(!bank){var h3=nl.slice(0,3).join('\n'),h10=nl.filter(function(x,ix){return ix<10&&!/^(ngan hang|tai\b|den\b|bank|recipient|beneficiary|ten nguoi|nguoi nhan)/.test(x);}).join('\n');
+    var BR=[['MB',/mbbank|mb bank|^mb$/m],['ACB',/\bacb\b/],['VPB',/vpbank/],['STB',/sacombank/],['AGR',/agribank/],['CTG',/vietinbank|ipay/],['TPB',/tpbank/],['MOMO',/momo/],['ZLP',/zalopay/],['OCB',/\bocb\b/],['SHB',/\bshb\b/],['HDB',/hdbank/],['MSB',/\bmsb\b|maritime/],['VIB',/\bvib\b/],['SEA',/seabank/],['EIB',/eximbank/],['LPB',/lpbank|lienviet/]];
+    for(var bi=0;bi<BR.length&&!bank;bi++){if(BR[bi][1].test(h3))bank=BR[bi][0];}
+    for(var bj=0;bj<BR.length&&!bank;bj++){if(BR[bj][1].test(h10))bank=BR[bj][0];}}
   if(!bank)flags.push('Không nhận ra ngân hàng của biên lai');
   function val(re){
     for(var i=0;i<lines.length;i++){var m=nl[i].match(re);
@@ -191,20 +195,23 @@ function parseReceipt(text){
     while(k<lines.length&&n<max&&!LABELS.test(nl[k])&&pattern.test(lines[k])){out+=' '+lines[k];k++;n++;}
     return out;}
   var upper=/^[A-Z][A-Z ]*$/;
-  var amount=null, a1=all.match(/(\d{1,3}(?:[.,]\d{3})+|\d+)\s*vnd/), a2=all.match(/vnd\s*(\d{1,3}(?:[.,]\d{3})+|\d+)/);
-  var am=(bank==='TCB')?(a2||a1):(a1||a2);
+  var amount=null, NUM='(\\d{1,3}(?:[.,]\\d{3})+|\\d+)';
+  var a1=all.match(new RegExp(NUM+'\\s*(?:v[nm]d?|vnd)\\b')), a2=all.match(new RegExp('v[nm]d\\s*'+NUM)), a3=all.match(new RegExp('(?:so tien(?: chuyen| giao dich)?|amount|tong tien|so tien thanh toan)\\s*[:：]?\\s*(?:vnd\\s*)?'+NUM+'(?!\\d)')), a4=all.match(new RegExp(NUM+'\\s*d\\b'));
+  var am=(bank==='TCB')?(a2||a1||a3||a4):(a1||a2||a3||a4);
   if(am)amount=parseInt(am[1].replace(/[.,]/g,''),10);
-  else{for(var q=0;q<Math.min(10,lines.length);q++){var g=lines[q].match(/(\d{1,3}(?:[.,]\d{3})+)/);
+  else{for(var q=0;q<Math.min(14,lines.length);q++){var g=lines[q].match(/(\d{1,3}(?:[.,]\d{3})+)/);
       if(g){amount=parseInt(g[1].replace(/[.,]/g,''),10);flags.push('Số tiền đoán từ chữ đọc được, hãy nhìn lại ảnh');break;}}}
   if(!amount)flags.push('Không đọc được số tiền');
-  var ts=null,d;
-  if((d=all.match(/(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{4})\s+at\s+(\d{1,2}):(\d{2})\s*(am|pm)/))){
-    var h=parseInt(d[4],10)%12+(d[6]==='pm'?12:0);ts=new Date(+d[3],MONTHS[d[2]]-1,+d[1],h,+d[5],0).getTime();}
-  else if((d=all.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/))){
-    ts=new Date(+d[3],+d[2]-1,+d[1],+d[4],+d[5],+(d[6]||0)).getTime();}
-  else if((d=all.match(/(\d{1,2}):(\d{2})\s+[^\d\n]*?(\d{2})\/(\d{2})\/(\d{4})/))){
-    ts=new Date(+d[5],+d[4]-1,+d[3],+d[1],+d[2],0).getTime();}
-  if(!ts)flags.push('Không đọc được ngày giờ');
+  var ts=null,d,tsGuess=false;
+  function mkts(y,mo,da,h,mi,se){if(mo<1||mo>12||da<1||da>31)return null;return new Date(y,mo-1,da,h,mi,se||0).getTime();}
+  if((d=all.match(/(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{4})\s+(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)/))){
+    var h=parseInt(d[4],10)%12+(d[6]==='pm'?12:0);ts=mkts(+d[3],MONTHS[d[2]],+d[1],h,+d[5],0);}
+  if(!ts&&(d=all.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})[\s,\-–]*(?:luc\s*|vao\s*|at\s*)?(\d{1,2})[:h](\d{2})(?:[:\/](\d{2}))?/)))ts=mkts(+d[3],+d[2],+d[1],+d[4],+d[5],+(d[6]||0));
+  if(!ts&&(d=all.match(/(\d{4})-(\d{2})-(\d{2})[t\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?/)))ts=mkts(+d[1],+d[2],+d[3],+d[4],+d[5],+(d[6]||0));
+  if(!ts&&(d=all.match(/(\d{1,2})[:h](\d{2})(?::\d{2})?\s+[^\d\n]*?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/)))ts=mkts(+d[5],+d[4],+d[3],+d[1],+d[2],0);
+  if(!ts&&(d=all.match(/ngay\s*(\d{1,2})\s*thang\s*(\d{1,2})\s*nam\s*(\d{4})/)))ts=mkts(+d[3],+d[2],+d[1],12,0,0);
+  if(!ts&&(d=all.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/))){ts=mkts(+d[3],+d[2],+d[1],12,0,0);if(ts)flags.push('Không đọc được giờ, tạm lấy 12:00, hãy kiểm tra');}
+  if(!ts){ts=Date.now();tsGuess=true;flags.push('Không đọc được ngày giờ, tạm lấy thời điểm hiện tại');}
   var name='',acct='',recBankText='',content='',ref='',fee=null,r;
   if(bank==='BIDV'){
     name=(val(/^den\s*:/)||{v:''}).v;
@@ -226,6 +233,14 @@ function parseReceipt(text){
     ref=(val(/^ma giao dich/)||{v:''}).v;
     var f=val(/^phi chuyen tien/); if(f)fee=/mien phi/.test(norm(f.v))?0:parseInt((f.v.replace(/\D/g,''))||'0',10);
   }
+  function gv(re){var r=val(re);return r?r.v:'';}
+  if(!name){r=val(/^(ten nguoi nhan|nguoi nhan|ten nguoi thu huong|nguoi thu huong|ten tai khoan|ten chu tai khoan|beneficiary(?: name)?|recipient(?: name)?|account name|den|to)\s*[:：]?(?=\s|$)/);if(r)name=cont(r,/^[A-Z][A-Z ]*$/,1);}
+  if(!name){for(var u=0;u<lines.length;u++){if(/^[A-Z][A-Z]+(?: [A-Z]+){1,5}$/.test(lines[u])&&!/VND|BANK|DIGIBANK|VIETNAM|SUCCESS|TRANSFER/.test(lines[u])){name=lines[u];break;}}}
+  if(!acct)acct=(gv(/^(tai khoan nhan|so tai khoan(?: nhan)?|so tk|stk|to account|account(?: number| no)?)\b/).match(/\d{6,19}/)||[''])[0];
+  if(!recBankText)recBankText=gv(/^(ngan hang nhan|ngan hang thu huong|tai ngan hang|ngan hang|recipient bank|beneficiary bank|bank)\b/);
+  if(!content)content=gv(/^(noi dung chuyen khoan|noi dung|loi nhan|message|description|content|remark|memo)\b/);
+  if(!ref)ref=gv(/^(ma giao dich|ma tham chieu|so tham chieu|ma gd|so giao dich|so but toan|transaction (?:id|no|code)|reference(?: code| no)?|trace(?: no)?)\b/);
+  if(fee===null){var ff=val(/^(phi chuyen tien|phi giao dich|phi|fee)\b/);if(ff)fee=/mien phi|free|0\s*vn/.test(norm(ff.v))?0:(parseInt(ff.v.replace(/\D/g,''),10)||null);}
   ref=ref.replace(/\s+/g,'');
   if(!ref)flags.push('Thiếu mã giao dịch, dễ bị ghi trùng');
   if(!name)flags.push('Không đọc được tên người nhận');
@@ -235,7 +250,7 @@ function parseReceipt(text){
     if(own){internal=true;why='Tài khoản nhận là của bạn ('+own.bank+' ••'+own.last4+')';}}
   if(!internal&&name&&norm(name).replace(/\s+/g,' ')===norm(OWNER_NAME)){flags.push('Người nhận trùng tên bạn nhưng tài khoản chưa khai báo, hãy kiểm tra');}
   return {bank:bank,amount:amount,dir:'chi',ts:ts,name:name,acct4:acct?acct.slice(-4):'',recBank:recBank,content:content,ref:ref,fee:fee,
-    key:(bank||'?')+':'+(ref||('x'+amount+'-'+ts)),internal:internal,why:why,flags:flags,ok:!!(bank&&amount&&ts&&ref)};
+    key:(bank||'?')+':'+(ref||('x'+amount+'-'+(tsGuess?Math.floor(ts/3600000):ts))),internal:internal,why:why,flags:flags,ok:!!(amount&&ts&&ref&&!tsGuess)};
 }
 /*PARSER_END*/
 
@@ -598,7 +613,7 @@ function sheetHtml(){var s=state.sheet;
       '<button class="btn" data-a="wsave">Lưu ví</button>'+
       (s.idx>=0&&others.length?(s.del?'<div class="card"><div class="what">Xóa ví "'+esc(WALLETS[s.idx].n)+'"?</div><div class="meta">Các khoản đang ở ví này sẽ chuyển sang ví bạn chọn.</div><label class="meta" for="w-to">Chuyển sang</label><select class="field" id="w-to">'+others.map(function(x){return '<option value="'+esc(x.n)+'">'+esc(x.n)+'</option>';}).join('')+'</select><div class="acts"><button class="btn ghost" data-a="wdelno">Giữ ví</button><button class="btn" data-a="wdelyes">Xóa ví</button></div></div>':'<button class="link" data-a="wdel" style="align-self:center;color:var(--chi)">Xóa ví này</button>'):'')+'</div>';}
   var p=s.p,dup=state.items.some(function(x){return x.key===p.key;});
-  var dl='<dl class="dl2"><dt>Ngân hàng</dt><dd>'+esc(bankLabel(p.bank))+'</dd><dt>Đến</dt><dd>'+esc(p.name||'?')+(p.acct4?' ••'+esc(p.acct4):'')+(p.recBank?' · '+esc(p.recBank):'')+'</dd><dt>Thời gian</dt><dd>'+(p.ts?when(p.ts):'?')+'</dd><dt>Mã giao dịch</dt><dd class="mono">'+esc(p.ref||'?')+'</dd>'+(p.fee!=null?'<dt>Phí</dt><dd>'+(p.fee?money(p.fee):'Miễn phí')+'</dd>':'')+'</dl>';
+  var dl='<dl class="dl2"><dt>Ngân hàng</dt><dd>'+esc(p.bank?bankLabel(p.bank):'Chưa rõ')+'</dd><dt>Đến</dt><dd>'+esc(p.name||'?')+(p.acct4?' ••'+esc(p.acct4):'')+(p.recBank?' · '+esc(p.recBank):'')+'</dd><dt>Thời gian</dt><dd>'+(p.ts?when(p.ts):'?')+'</dd><dt>Mã giao dịch</dt><dd class="mono">'+esc(p.ref||'?')+'</dd>'+(p.fee!=null?'<dt>Phí</dt><dd>'+(p.fee?money(p.fee):'Miễn phí')+'</dd>':'')+'</dl>';
   var top='<div class="card"><label class="meta" for="r-amt">Số tiền (sửa được nếu đọc sai)</label><input class="field" id="r-amt" inputmode="numeric" value="'+(p.amount||'')+'" style="font-size:22px;font-weight:800"><label class="meta" for="r-note">Nội dung (sửa được)</label><input class="field" id="r-note" value="'+esc(p.content||'')+'">'+dl+(p.senderPerson?'<div><span class="tag ok">Người chi: '+esc(p.senderPerson)+' (nhận theo tên '+esc(p.senderName)+')</span></div>':'')+(p.flags.length?'<div>'+p.flags.map(function(f){return '<span class="tag warn">'+esc(f)+'</span>';}).join(' ')+'</div>':'')+'</div>';
   if(dup)return '<div class="in">'+head+top+'<div class="card"><span class="tag warn">Trùng mã giao dịch</span><div class="meta">Biên lai này đã có trong sổ, nên app không ghi thêm lần nữa.</div><button class="btn" data-a="close">Đóng</button></div></div>';
   if(!p.ts)return '<div class="in">'+head+top+'<div class="meta">Chưa đọc được giờ giao dịch nên chưa thể lưu. Hãy sửa lại chữ dán vào.</div><button class="btn ghost" data-a="back">Quay lại</button></div>';
@@ -608,7 +623,7 @@ function sheetHtml(){var s=state.sheet;
     :'<div class="sugtxt">'+(sug?'Gợi ý: '+esc(sug)+'. Chạm một ví để lưu ngay.':'Chạm một ví để lưu ngay.')+'</div>'+walletGrid({a:'ralloc',sug:sug})+'<button class="link" data-a="rsplit">Chia vào nhiều ví</button>';
   return '<div class="in">'+head+top+'<div class="row"><span class="meta">Người chi</span>'+whoBtns(s.payer,'','rpayer')+'</div>'+bd+'<button class="link" data-a="back" style="align-self:center">Xem hoặc sửa chữ đã đọc</button></div>';}
 
-function newFromParsed(p,payer,allocs,internalDone){ensureSource(p.bank);var it=mk(p,{origin:'Biên lai chia sẻ',payer:payer});
+function newFromParsed(p,payer,allocs,internalDone){if(!p.bank)p.bank='Khác';ensureSource(p.bank);var it=mk(p,{origin:'Biên lai chia sẻ',payer:payer});
   if(internalDone){it.status='done';it.internal=true;it.alloc=[];}else{it.status='done';it.alloc=allocs;}return it;}
 function syncDraft(){var s=state.sheet;if(!s)return;var g=function(id){return document.getElementById(id);};
   if(s.type==='edit'){var d=s.draft;if(g('e-amt'))d.amount=g('e-amt').value;if(g('e-ts'))d.ts=g('e-ts').value;if(g('e-note'))d.note=g('e-note').value;
@@ -640,7 +655,7 @@ document.addEventListener('click',function(e){var b=e.target.closest('[data-a]')
   else if(a==='msave'){var amt=parseInt(s.digits||'0',10),ts=s.date?new Date(s.date+'T'+p2(new Date().getHours())+':'+p2(new Date().getMinutes())+':00').getTime():Date.now()-Math.max(s.day,0)*DAY,bk=s.src,id=Math.random().toString(36).slice(2,8);
     var n=mk({key:'tay:'+id,bank:bk,amount:amt,dir:s.dir,ts:ts,name:'',content:s.note||s.wallet,ref:'',flags:[]},{origin:s.src==='TM'?'Nhập tay (tiền mặt)':'Nhập tay',payer:s.payer,status:'done',alloc:[{wallet:s.wallet,amount:amt}]});
     finishAlloc(n,'Đã lưu '+money(amt)+' vào ví '+s.wallet);}
-  else if(a==='parse'){var tx=document.getElementById('paste').value;if(!tx.trim()){toast('Hãy dán nội dung biên lai trước');return;}var pq=enrich(parseReceipt(tx),tx);if(!pq.bank&&!pq.amount){toast('Chưa nhận ra biên lai này. Hãy dán đủ chữ từ biên lai, hoặc dùng Nhập tay.');return;}state.sheet={type:'alloc',p:pq,payer:pq.senderPerson||defPayer(),split:false,paste:tx};render();}
+  else if(a==='parse'){var tx=document.getElementById('paste').value;if(!tx.trim()){toast('Hãy dán nội dung biên lai trước');return;}var pq=enrich(parseReceipt(tx),tx);if(!pq.amount&&!pq.ref&&!pq.name){toast('Chưa nhận ra biên lai này. Hãy dán đủ chữ từ biên lai, hoặc dùng Nhập tay.');return;}state.sheet={type:'alloc',p:pq,payer:pq.senderPerson||defPayer(),split:false,paste:tx};render();}
   else if(a==='rpayer'){s.payer=v;render();}
   else if(a==='ralloc'){if(!s.p.amount){toast('Nhập số tiền trước khi lưu');return;}var n2=newFromParsed(s.p,s.payer,[{wallet:v,amount:s.p.amount}],false);var ex=learn(n2,v);finishAlloc(n2,ex||('Đã lưu '+money(n2.amount)+' vào ví '+v));}
   else if(a==='rsplit'){s.split=true;render();}
@@ -838,7 +853,7 @@ window.addEventListener('online',function(){doSync();});
 setInterval(function(){if(document.visibilityState==='visible')doSync();},60000);
 /* ---- đọc biên lai: văn bản và ảnh ---- */
 function openText(tx){var pq=enrich(parseReceipt(tx),tx);
-  if(!pq.bank&&!pq.amount){state.sheet={type:'pick',paste:tx};render();toast('Chưa nhận ra biên lai. Hãy xem lại chữ rồi bấm Tách thông tin.');return;}
+  if(!pq.amount&&!pq.ref&&!pq.name){state.sheet={type:'pick',paste:tx};render();toast('Chưa nhận ra biên lai. Hãy xem lại chữ rồi bấm Tách thông tin.');return;}
   state.tab='home';state.homeView='pending';state.sheet={type:'alloc',p:pq,payer:pq.senderPerson||defPayer(),split:false,paste:tx};render();}
 var tessP=null;
 function loadTess(){if(window.Tesseract)return Promise.resolve(window.Tesseract);if(tessP)return tessP;
