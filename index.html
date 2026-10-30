@@ -195,12 +195,16 @@ function parseReceipt(text){
     while(k<lines.length&&n<max&&!LABELS.test(nl[k])&&pattern.test(lines[k])){out+=' '+lines[k];k++;n++;}
     return out;}
   var upper=/^[A-Z][A-Z ]*$/;
-  var amount=null, NUM='(\\d{1,3}(?:[.,]\\d{3})+|\\d+)';
+  var amount=null, NUM='(\\d{1,3}(?:[.,\\u0020]\\d{3})+|\\d+)';
   var a1=all.match(new RegExp(NUM+'\\s*(?:v[nm]d?|vnd)\\b')), a2=all.match(new RegExp('v[nm]d\\s*'+NUM)), a3=all.match(new RegExp('(?:so tien(?: chuyen| giao dich)?|amount|tong tien|so tien thanh toan)\\s*[:：]?\\s*(?:vnd\\s*)?'+NUM+'(?!\\d)')), a4=all.match(new RegExp(NUM+'\\s*d\\b'));
   var am=(bank==='TCB')?(a2||a1||a3||a4):(a1||a2||a3||a4);
-  if(am)amount=parseInt(am[1].replace(/[.,]/g,''),10);
-  else{for(var q=0;q<Math.min(14,lines.length);q++){var g=lines[q].match(/(\d{1,3}(?:[.,]\d{3})+)/);
-      if(g){amount=parseInt(g[1].replace(/[.,]/g,''),10);flags.push('Số tiền đoán từ chữ đọc được, hãy nhìn lại ảnh');break;}}}
+  if(am)amount=parseInt(am[1].replace(/[.,\s]/g,''),10)||null;
+  if(!amount){var guess=null,L14=lines.slice(0,14).map(function(x){var y=x,z;for(var k=0;k<8;k++){z=y.replace(/(\d[.,]?)[OoQ](?![A-Za-z])/,'$10');if(z===y)break;y=z;}return y;});
+    for(var q=0;q<L14.length&&guess===null;q++){var g=L14[q].match(/(\d{1,3}(?:[.,]\d{3})+)(?!\d)/);if(g)guess=parseInt(g[1].replace(/[.,]/g,''),10);}
+    if(guess===null){var hq=-1;for(var h2=0;h2<L14.length;h2++){if(/thanh cong|successful|transferred|thanh toan/.test(norm(L14[h2]))){hq=h2;break;}}
+      var from=hq>=0?hq:0,to=hq>=0?Math.min(L14.length,hq+5):Math.min(L14.length,8);
+      for(var q2=from;q2<to&&guess===null;q2++){var t2=L14[q2];if(/[:\/]\s*\d|\d\s*[:\/]/.test(t2))continue;var g2=t2.match(/(?:^|[^\d])(\d{4,10})(?!\d)/);if(g2)guess=parseInt(g2[1],10);}}
+    if(guess){amount=guess;flags.push('Số tiền đoán từ chữ đọc được, hãy nhìn lại ảnh');}}
   if(!amount)flags.push('Không đọc được số tiền');
   var ts=null,d,tsGuess=false;
   function mkts(y,mo,da,h,mi,se){if(mo<1||mo>12||da<1||da>31)return null;return new Date(y,mo-1,da,h,mi,se||0).getTime();}
