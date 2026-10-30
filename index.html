@@ -880,9 +880,11 @@ sheetHtml=function(){var s=state.sheet;if(s&&s.type==='ocr')return '<div class="
 document.addEventListener('change',function(e){var el=e.target;if(el&&el.id==='imgf'&&el.files&&el.files[0]){var f=el.files[0];el.value='';runOcr(f);}});
 /* ---- khởi động ---- */
 syncLoad();
-function handleHash(){var hs=location.hash.replace(/^#/,'');if(!hs)return;var q={};hs.split('&').forEach(function(p){var i=p.indexOf('=');if(i>0)q[p.slice(0,i)]=decodeURIComponent(p.slice(i+1));});
+function sd(v){try{return decodeURIComponent(v);}catch(e){return v;}}
+function b64txt(b){try{var bin=atob(String(b).replace(/-/g,'+').replace(/_/g,'/').replace(/[^A-Za-z0-9+\/=]/g,'')),by=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);return new TextDecoder('utf-8').decode(by);}catch(e){return '';}}
+function handleHash(){var hs=location.hash.replace(/^#/,'');if(!hs)return;var q={};hs.split('&').forEach(function(p){var i=p.indexOf('=');if(i>0)q[p.slice(0,i)]=sd(p.slice(i+1));});
   if(q.u&&q.p){sync.url=q.u;sync.pin=q.p;sync.since=0;sync.synced={};sync.first=true;sync.err='';sync.last=0;syncSave();state.open.sync=true;state.tab='settings';history.replaceState(null,'',location.pathname+location.search);setTimeout(function(){toast('Đang nối với Google Sheet của nhà mình...');},300);}
-  else if(q.t){var tx=q.t;history.replaceState(null,'',location.pathname+location.search);setTimeout(function(){openText(tx);},200);}}
+  else if(q.t||q.b){var tx=q.b?b64txt(q.b):q.t;history.replaceState(null,'',location.pathname+location.search);setTimeout(function(){openText(tx);},200);}}
 window.addEventListener('hashchange',function(){handleHash();render();doSync();});
 handleHash();
 load();render();fireDue();
